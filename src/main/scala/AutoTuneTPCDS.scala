@@ -1,20 +1,20 @@
-import org.apache.spark.sql.SparkSession
-import org.autotune.exampleConfigs.SparkTuneableConf
-import org.autotune._
-import org.scalatest.FunSuite
-import com.databricks.spark.sql.perf.tpcds.TPCDS
-import com.databricks.spark.sql.perf.tpcds.Tables
+import com.databricks.spark.sql.perf.tpcds.{TPCDS, Tables}
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.functions._
+import org.autotune._
+import org.autotune.exampleConfigs.SparkTuneableConf
+import org.scalatest.FunSuite
 
-class AutoTuneTPCDS extends FunSuite {
+class AutoTuneTPCDS extends FunSuite{
 
   private def getSparkBuilder(): SparkSession.Builder ={
     return SparkSession.builder.
       appName("TPCDS AutoTune Benchmark")
-      .master("local[*]")
-      .config("spark.sql.perf.results", "/Users/KevinRoj/Desktop/testdata"); //directory for results
+      //.master("local[*]") //-Dspark.master="local[*]"
+      //.config("spark.sql.perf.results", "/tmp/results"); //directory for results
+      // better: -Dspark.sql.perf.results="/tmp/results"
   }
 
   private def reduceLogLevel(spark: SparkSession) = {
@@ -22,19 +22,26 @@ class AutoTuneTPCDS extends FunSuite {
     sparkContextD.setLogLevel("ERROR")
   }
 
-  private def runBenchmark(spark: SparkSession) : Double = {
+  private def runBenchmark(spark: SparkSession, benchmarkTypeStr: String) : Double = {
     val sqlContext = spark.sqlContext
 
     // Tables in TPC-DS benchmark used by experiments.
     // dsdgenDir is the location of dsdgen tool installed in your machines.
     // scaleFactor - Volume of data to generate in GB
     val tables = new Tables(sqlContext, "/Users/KevinRoj/Desktop/tpcds-kit-master/tools", 1)
-    // Generate data.
-    //tables.genData("/Volumes/Externe SSD/BigData", "parquet", true, true, true, true, false)
 
     tables.createTemporaryTables("/Volumes/Externe SSD/BigData", "parquet")
+
     val tpcds = new TPCDS(sqlContext = sqlContext)
-    val experiment = tpcds.runExperiment(tpcds.interactiveQueries)
+    var benchmark = tpcds.tpcds2_4Queries //default value
+    benchmarkTypeStr match {
+      case "tpcds2_4Queries" => benchmark = tpcds.tpcds2_4Queries
+      case "tpcds1_4Queries" => benchmark = tpcds.tpcds1_4Queries
+      case "impalaKitQueries" => benchmark = tpcds.impalaKitQueries
+      case "interactiveQueries" => benchmark = tpcds.interactiveQueries
+      case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
+    }
+    val experiment = tpcds.runExperiment(benchmark)
     experiment.waitForFinish(60*60*10)
 
     //get result
@@ -46,21 +53,32 @@ class AutoTuneTPCDS extends FunSuite {
     return runtime
   }
 
-  test("autotune benchmark") {
+  def main (arg: Array[String]): Unit = {
+    val benchmarkTypeStr = arg(0)
+
     val tuner = new AutoTuneDefault[SparkTuneableConf](new SparkTuneableConf)
 
-    {
-      val cfg = new SparkTuneableConf //warm up with default configuration //tuner.start.getConfig
+    { //warm up with default configuration
+      val cfg = new SparkTuneableConf
       val spark = cfg.setConfig(getSparkBuilder()).getOrCreate
       val sqlContext = spark.sqlContext
 
       val tables = new Tables(sqlContext, "/Users/KevinRoj/Desktop/tpcds-kit-master/tools", 1)
       // Generate data.
-      //tables.genData("/Volumes/Externe SSD/BigData", "parquet", true, true, true, true, false)
+      //tables.genData("/Volumes/Externe SSD/BigData3", "parquet", true, true, true, true, false)
 
-      tables.createTemporaryTables("/Volumes/Externe SSD/BigData", "parquet")
+      tables.createTemporaryTables("/Volumes/Externe SSD/BigData3", "parquet")
       val tpcds = new TPCDS(sqlContext = sqlContext)
-      val experiment = tpcds.runExperiment(tpcds.interactiveQueries)
+
+      var benchmark = tpcds.tpcds2_4Queries //default value
+      benchmarkTypeStr match {
+        case "tpcds2_4Queries" => benchmark = tpcds.tpcds2_4Queries
+        case "tpcds1_4Queries" => benchmark = tpcds.tpcds1_4Queries
+        case "impalaKitQueries" => benchmark = tpcds.impalaKitQueries
+        case "interactiveQueries" => benchmark = tpcds.interactiveQueries
+        case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
+      }
+      val experiment = tpcds.runExperiment(benchmark)
       experiment.waitForFinish(60*60*10)
     }
 
@@ -76,7 +94,7 @@ class AutoTuneTPCDS extends FunSuite {
       val spark: SparkSession = cfg.setConfig(getSparkBuilder).getOrCreate
       reduceLogLevel(spark)
 
-      val cost = runBenchmark(spark)
+      val cost = runBenchmark(spark, benchmarkTypeStr)
       spark.stop()
 
       tuner.addCost(cost)
