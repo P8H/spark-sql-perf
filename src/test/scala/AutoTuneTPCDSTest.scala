@@ -12,8 +12,7 @@ class AutoTuneTPCDSTest extends FunSuite{
   test("autotune benchmark") {
 
     {
-      val bench = new AutoTuneTPCDS
-      bench.main(Array("interactiveQueries"))
+      AutoTuneTPCDS.main(Array("interactiveQueries"))
     }
 
   }
