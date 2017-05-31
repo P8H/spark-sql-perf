@@ -4,7 +4,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.functions._
 import org.autotune._
-import org.autotune.exampleConfigs.SparkTuneableConf
+import org.autotune.config.SparkTuneableConfig
+
 
 object AutoTuneTPCDS{
   val pathDataset = "hdfs://141.100.62.105:54310/user/istkerojc/tpcds3/bigdata30"
@@ -56,10 +57,10 @@ object AutoTuneTPCDS{
   def main(args: Array[String]) {
     val benchmarkTypeStr = args(0)
 
-    val tuner = new AutoTuneDefault[SparkTuneableConf](new SparkTuneableConf)
+    val tuner = new AutoTuneDefault[SparkTuneableConfig](new SparkTuneableConfig)
 
     { //warm up with default configuration
-      val cfg = new SparkTuneableConf
+      val cfg = new SparkTuneableConfig
       val spark = cfg.setConfig(getSparkBuilder()).getOrCreate
       val sqlContext = spark.sqlContext
 
@@ -88,7 +89,7 @@ object AutoTuneTPCDS{
     while ( {
       t < 40
     }) { //40 benchmark tests
-      val cfg: SparkTuneableConf = tuner.start.getConfig
+      val cfg: SparkTuneableConfig = tuner.start.getConfig
       val spark: SparkSession = cfg.setConfig(getSparkBuilder).getOrCreate
       reduceLogLevel(spark)
 
