@@ -10,9 +10,13 @@ import org.autotune.config.SparkTuneableConfig
 object AutoTuneTPCDS{
   val pathDataset = "hdfs://141.100.62.105:54310/user/istkerojc/tpcds3/bigdata30"
 
-  private def getSparkBuilder(): SparkSession.Builder ={
+  private def getSparkBuilder(number: Number = 0): SparkSession.Builder = {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
     return SparkSession.builder.
-      appName("TPCDS AutoTune Benchmark")
+      appName("TPCDS AutoTune Benchmark" + number)
+      .enableHiveSupport()
+      .config("spark.sql.perf.results", "hdfs://141.100.62.105:54310/tmp/tpcds")
       //.master("local[*]") //-Dspark.master="local[*]"
       //.config("spark.sql.perf.results", "/tmp/results"); //directory for results
       // better: -Dspark.sql.perf.results="/tmp/results"
@@ -34,6 +38,7 @@ object AutoTuneTPCDS{
     tables.createTemporaryTables(pathDataset, "parquet")
 
     val tpcds = new TPCDS(sqlContext = sqlContext)
+
     var benchmark = tpcds.tpcds2_4Queries //default value
     benchmarkTypeStr match {
       case "tpcds2_4Queries" => benchmark = tpcds.tpcds2_4Queries
@@ -42,6 +47,7 @@ object AutoTuneTPCDS{
       case "interactiveQueries" => benchmark = tpcds.interactiveQueries
       case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
     }
+
     val experiment = tpcds.runExperiment(benchmark)
     experiment.waitForFinish(60*60*10)
 
@@ -59,10 +65,11 @@ object AutoTuneTPCDS{
 
     val tuner = new AutoTuneDefault[SparkTuneableConfig](new SparkTuneableConfig)
 
-    { //warm up with default configuration
-      val cfg = new SparkTuneableConfig
-      val spark = cfg.setConfig(getSparkBuilder()).getOrCreate
-      val sqlContext = spark.sqlContext
+
+    //warm up with default configuration
+    {
+      val sparkWarmUp = getSparkBuilder(-1).getOrCreate
+      val sqlContext = sparkWarmUp.sqlContext
 
       val tables = new Tables(sqlContext, "/Users/KevinRoj/Desktop/tpcds-kit-master/tools", 30)
 
@@ -78,8 +85,11 @@ object AutoTuneTPCDS{
         case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
       }
       val experiment = tpcds.runExperiment(benchmark)
-      experiment.waitForFinish(60*60*10)
+      experiment.waitForFinish(60 * 60 * 10)
+      sqlContext.clearCache()
+      sparkWarmUp.stop()
     }
+
 
 
 
@@ -90,10 +100,11 @@ object AutoTuneTPCDS{
       t < 40
     }) { //40 benchmark tests
       val cfg: SparkTuneableConfig = tuner.start.getConfig
-      val spark: SparkSession = cfg.setConfig(getSparkBuilder).getOrCreate
+      val spark: SparkSession = cfg.setConfig(getSparkBuilder(t)).getOrCreate
       reduceLogLevel(spark)
 
       val cost = runBenchmark(spark, benchmarkTypeStr)
+      spark.sqlContext.clearCache()
       spark.stop()
 
       tuner.addCost(cost)
@@ -103,6 +114,9 @@ object AutoTuneTPCDS{
         t += 1; t - 1
       }
     }
+
+
+    runBenchmark(getSparkBuilder(-2).getOrCreate, benchmarkTypeStr)
 
 
   }
