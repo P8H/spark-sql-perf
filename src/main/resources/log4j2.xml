@@ -5,8 +5,8 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="org.autotune" level="trace" additivity="false">
-            <appender-ref ref="default" level="trace"/>
+        <Logger name="org.autotune" level="debug" additivity="false">
+            <appender-ref ref="default" level="debug"/>
         </Logger>
         <Root level="error">
             <AppenderRef ref="default"/>
