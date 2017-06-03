@@ -16,9 +16,8 @@
 
 package com.databricks.spark.sql.perf.tpcds
 
+import com.databricks.spark.sql.perf.{Benchmark, ExecutionMode}
 import org.apache.commons.io.IOUtils
-
-import com.databricks.spark.sql.perf.{Benchmark, ExecutionMode, Query}
 
 /**
  * This implements the official TPCDS v2.4 queries with only cosmetic modifications.
@@ -49,4 +48,5 @@ trait Tpcds_2_4_Queries extends Benchmark {
   }
 
   val tpcds2_4QueriesMap = tpcds2_4Queries.map(q => q.name.split("-").get(0) -> q).toMap
+
 }

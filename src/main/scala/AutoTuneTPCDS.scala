@@ -17,6 +17,7 @@ object AutoTuneTPCDS{
       appName("TPCDS AutoTune Benchmark" + number)
       .enableHiveSupport()
       .config("spark.sql.perf.results", "hdfs://141.100.62.105:54310/tmp/tpcds")
+      .config("spark.sql.crossJoin.enabled", true) //workaround for some queries
       //.master("local[*]") //-Dspark.master="local[*]"
       //.config("spark.sql.perf.results", "/tmp/results"); //directory for results
       // better: -Dspark.sql.perf.results="/tmp/results"
@@ -27,7 +28,7 @@ object AutoTuneTPCDS{
     sparkContextD.setLogLevel("ERROR")
   }
 
-  private def runBenchmark(spark: SparkSession, benchmarkTypeStr: String) : Double = {
+  private def runBenchmark(spark: SparkSession, benchmarkTypeStr2: Any): Double = {
     val sqlContext = spark.sqlContext
 
     // Tables in TPC-DS benchmark used by experiments.
@@ -40,13 +41,14 @@ object AutoTuneTPCDS{
     val tpcds = new TPCDS(sqlContext = sqlContext)
 
     var benchmark = tpcds.tpcds2_4Queries //default value
-    benchmarkTypeStr match {
+
+    benchmarkTypeStr2 match {
       case "tpcds2_4Queries" => benchmark = tpcds.tpcds2_4Queries
       case "tpcds1_4Queries" => benchmark = tpcds.tpcds1_4Queries
       case "impalaKitQueries" => benchmark = tpcds.impalaKitQueries
       case "interactiveQueries" => benchmark = tpcds.interactiveQueries
       case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
-      case _ => benchmark = Seq(benchmarkTypeStr).map(tpcds.queriesMap) //assume that we want to benchmark a single query
+      case n: Int => benchmark = Seq(tpcds.tpcds2_4Queries.apply(n)) //assume that we want to benchmark a single query
     }
 
     val experiment = tpcds.runExperiment(benchmark)
@@ -63,9 +65,7 @@ object AutoTuneTPCDS{
 
   def main(args: Array[String]) {
     val benchmarkTypeStr = args(0)
-
-    val tuner = new AutoTuneDefault[SparkTuneableConfig](new SparkTuneableConfig)
-
+    var singleEvaluation = false;
 
     //warm up with default configuration
     {
@@ -84,7 +84,7 @@ object AutoTuneTPCDS{
         case "impalaKitQueries" => benchmark = tpcds.impalaKitQueries
         case "interactiveQueries" => benchmark = tpcds.interactiveQueries
         case "deepAnalyticQueries" => benchmark = tpcds.deepAnalyticQueries
-        case "singleEvaluation" => benchmark = tpcds.tpcds2_4Queries
+        case _ => singleEvaluation = true
       }
       val experiment = tpcds.runExperiment(benchmark)
       experiment.waitForFinish(60 * 60 * 10)
@@ -94,9 +94,9 @@ object AutoTuneTPCDS{
 
 
     /** optional: activate single query evaluation **/
-    //var singleEvaluation: Boolean = benchmarkTypeStr.eq("singleEvaluation")
-    val evaluationList: Seq[String] = if (benchmarkTypeStr.eq("singleEvaluation")) queryNames else Seq(benchmarkTypeStr)
-    for (benchmarkTypeStr <- evaluationList) {
+    val evaluationList: Seq[Any] = if (singleEvaluation) Seq.range(0, queryNames.size - 1) else Seq(benchmarkTypeStr)
+    for (bench <- evaluationList) {
+      val tuner = new AutoTuneDefault[SparkTuneableConfig](new SparkTuneableConfig)
 
       /** tune section - search for the best configuration **/
       var t: Int = 0
@@ -107,7 +107,7 @@ object AutoTuneTPCDS{
         val spark: SparkSession = cfg.setConfig(getSparkBuilder(t)).getOrCreate
         reduceLogLevel(spark)
 
-        val cost = runBenchmark(spark, benchmarkTypeStr)
+        val cost = runBenchmark(spark, bench)
         spark.sqlContext.clearCache()
         spark.stop()
 
@@ -115,12 +115,12 @@ object AutoTuneTPCDS{
         tuner.end()
 
         {
-          t += 1;
+          t += 1
           t - 1
         }
       }
 
-      val cost = runBenchmark(getSparkBuilder(-2).getOrCreate, benchmarkTypeStr)
+      val cost = runBenchmark(getSparkBuilder(-2).getOrCreate, bench)
       println("Cost from last default execution: " + cost)
       println("Cost from best evaluation: " + tuner.getBestResult)
     }
