@@ -1,4 +1,5 @@
 import com.databricks.spark.sql.perf.tpcds.{TPCDS, Tables}
+import org.apache.spark.SparkConf
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -10,14 +11,24 @@ import org.autotune.config.SparkTuneableConfig
 object AutoTuneTPCDS{
   val pathDataset = "hdfs://141.100.62.105:54310/user/istkerojc/tpcds2/BigData3"
 
-  private def getSparkBuilder(number: Number = 0): SparkSession.Builder = {
+  private def getSparkBuilder(number: Number = 0, defaultValues: Boolean = false): SparkSession.Builder = {
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    return SparkSession.builder.
-      appName("TPCDS AutoTune Benchmark" + number)
-      .enableHiveSupport()
-      .config("spark.sql.perf.results", "hdfs://141.100.62.105:54310/tmp/tpcds")
-      .config("spark.sql.crossJoin.enabled", true) //workaround for some queries
+    if (defaultValues) {
+      return SparkSession.builder.
+        appName("TPCDS AutoTune Benchmark DefaultValues")
+        .config(new SparkConf(true))
+        .enableHiveSupport()
+        .config("spark.sql.perf.results", "hdfs://141.100.62.105:54310/tmp/tpcds")
+        .config("spark.sql.crossJoin.enabled", true) //workaround for some queries
+    } else {
+      return SparkSession.builder.
+        appName("TPCDS AutoTune Benchmark" + number)
+        .enableHiveSupport()
+        .config("spark.sql.perf.results", "hdfs://141.100.62.105:54310/tmp/tpcds")
+        .config("spark.sql.crossJoin.enabled", true) //workaround for some queries
+    }
+
       //.master("local[*]") //-Dspark.master="local[*]"
       //.config("spark.sql.perf.results", "/tmp/results"); //directory for results
       // better: -Dspark.sql.perf.results="/tmp/results"
@@ -120,7 +131,9 @@ object AutoTuneTPCDS{
         }
       }
 
-      val cost = runBenchmark(getSparkBuilder(-2).getOrCreate, bench)
+      val cfg: SparkTuneableConfig = new SparkTuneableConfig
+      val spark: SparkSession = cfg.setConfig(getSparkBuilder(-2)).getOrCreate
+      val cost = runBenchmark(spark, bench)
       println("Cost from last default execution: " + cost)
       println("Cost from best evaluation: " + tuner.getBestResult)
     }

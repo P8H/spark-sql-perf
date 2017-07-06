@@ -5,7 +5,7 @@ class AutoTuneTPCDSTest extends FunSuite{
   test("autotune benchmark") {
 
     {
-      AutoTuneTPCDS.main(Array("singleEvaluation"))
+      AutoTuneTPCDS.main(Array("deepAnalyticQueries"))
     }
 
   }
